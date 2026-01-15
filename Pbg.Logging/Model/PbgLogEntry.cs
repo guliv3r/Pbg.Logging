@@ -1,4 +1,4 @@
-﻿namespace Pbg.Logging;
+﻿namespace Pbg.Logging.Model;
 
 public class PbgLogEntry
 {

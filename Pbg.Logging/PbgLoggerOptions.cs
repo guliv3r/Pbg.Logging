@@ -1,4 +1,6 @@
-﻿namespace Pbg.Logging;
+﻿using Pbg.Logging.Model;
+
+namespace Pbg.Logging;
 
 public class PbgLoggerOptions
 {

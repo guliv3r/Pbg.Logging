@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Pbg.Logging.Model;
 using System.Net.Http.Json;
 using System.Threading.Channels;
 
