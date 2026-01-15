@@ -9,11 +9,13 @@ internal class PbgLogger : ILogger
 {
     private readonly ChannelWriter<PbgLogEntry> _writer;
     private readonly IExternalScopeProvider? _scopeProvider;
+    private readonly string _categoryName;
 
-    public PbgLogger(ChannelWriter<PbgLogEntry> writer, IExternalScopeProvider? scopeProvider)
+    public PbgLogger(ChannelWriter<PbgLogEntry> writer, IExternalScopeProvider? scopeProvider, string categoryName)
     {
         _writer = writer;
         _scopeProvider = scopeProvider;
+        _categoryName = categoryName;
     }
 
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull => _scopeProvider?.Push(state);
@@ -22,49 +24,55 @@ internal class PbgLogger : ILogger
 
     public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
     {
-        if (!IsLevelEnabled(logLevel)) return;
+        if (!ShouldLog(logLevel)) return;
 
         var entry = new PbgLogEntry
         {
             Timestamp = DateTime.UtcNow,
             LogLevel = logLevel.ToString(),
             Message = formatter(state, exception),
-            Exception = exception?.ToString(),
+            Exception = exception?.ToString()
         };
 
         string? foundTraceId = Activity.Current?.TraceId.ToHexString();
-        string? foundUserId = null;
 
-        _scopeProvider?.ForEachScope<object?>((scope, stateRef) =>
+        _scopeProvider?.ForEachScope((scope, currentEntry) =>
         {
             if (scope is IEnumerable<KeyValuePair<string, object>> properties)
             {
                 foreach (var prop in properties)
                 {
-                    if (prop.Key == "UserId") foundUserId = prop.Value?.ToString();
-                    if (prop.Key == "TraceId" && string.IsNullOrEmpty(foundTraceId))
-                        foundTraceId = prop.Value?.ToString();
+                    switch (prop.Key)
+                    {
+                        case "UserId": currentEntry.UserId = prop.Value?.ToString(); break;
+                        case "TraceId":  if (string.IsNullOrEmpty(foundTraceId)) foundTraceId = prop.Value?.ToString(); break;
+                        case "RequestBody": currentEntry.RequestBody = prop.Value?.ToString(); break;
+                        case "ResponseBody": currentEntry.ResponseBody = prop.Value?.ToString(); break;
+                        case "Method": currentEntry.Method = prop.Value?.ToString();  break;
+                        case "Path": currentEntry.Path = prop.Value?.ToString(); break;
+                        case "StatusCode": if (prop.Value is int code) currentEntry.StatusCode = code; break;
+                        case "Elapsed": if (prop.Value is double ms) currentEntry.ElapsedMilliseconds = ms; break;
+                    }
                 }
             }
-        }, null);
-
-        entry.UserId = foundUserId;
+        }, entry);
 
         entry.TraceId = foundTraceId ?? Guid.NewGuid().ToString("N");
 
         _writer.TryWrite(entry);
     }
 
-    private bool IsLevelEnabled(LogLevel logLevel)
+    private bool ShouldLog(LogLevel logLevel)
     {
-        return logLevel switch
+        if (logLevel >= LogLevel.Error) return true;
+
+        if (_categoryName.Contains("Microsoft.Hosting.Lifetime")) return true;
+
+        if (_categoryName.StartsWith("Microsoft") || _categoryName.StartsWith("System"))
         {
-            LogLevel.Trace => true,
-            LogLevel.Information => true,
-            LogLevel.Warning => true,
-            LogLevel.Error => true,
-            LogLevel.Critical => true,
-            _ => false
-        };
+            return logLevel >= LogLevel.Warning;
+        }
+
+        return true;
     }
 }

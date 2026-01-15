@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 using System.Security.Claims;
 
 namespace Pbg.Logging;
@@ -15,21 +16,65 @@ public class PbgLoggingMiddleware
 
     public async Task InvokeAsync(HttpContext context, ILogger<PbgLoggingMiddleware> logger)
     {
+        var sw = Stopwatch.StartNew();
+
         var userId = context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
                      ?? context.User?.FindFirst("sub")?.Value
-                     ?? "Anonymous";
+                     ?? string.Empty;
 
         var traceId = context.TraceIdentifier;
 
-        var scopeData = new Dictionary<string, object>
+        context.Request.EnableBuffering();
+        var requestBody = await new StreamReader(context.Request.Body).ReadToEndAsync();
+        context.Request.Body.Position = 0;
+
+        var originalBodyStream = context.Response.Body;
+        using var responseBodyMemoryStream = new MemoryStream();
+        context.Response.Body = responseBodyMemoryStream;
+
+        var initialScope = new Dictionary<string, object>
         {
-            { "UserId", userId },
-            { "TraceId", traceId }
+            ["UserId"] = userId,
+            ["TraceId"] = traceId,
+            ["Method"] = context.Request.Method,
+            ["Path"] = context.Request.Path
         };
 
-        using (logger.BeginScope(scopeData))
+        using (logger.BeginScope(initialScope))
         {
-            await _next(context);
+            try
+            {
+                await _next(context);
+
+                responseBodyMemoryStream.Position = 0;
+                var responseBody = await new StreamReader(responseBodyMemoryStream).ReadToEndAsync();
+                responseBodyMemoryStream.Position = 0;
+
+                sw.Stop();
+
+                var finalScope = new Dictionary<string, object>
+                {
+                    ["StatusCode"] = context.Response.StatusCode,
+                    ["RequestBody"] = requestBody,
+                    ["ResponseBody"] = responseBody,
+                    ["Elapsed"] = sw.Elapsed.TotalMilliseconds
+                };
+
+                using (logger.BeginScope(finalScope))
+                {
+                    logger.LogInformation("HTTP Transaction Completed");
+                }
+
+                await responseBodyMemoryStream.CopyToAsync(originalBodyStream);
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+            finally
+            {
+                context.Response.Body = originalBodyStream;
+            }
         }
     }
 }

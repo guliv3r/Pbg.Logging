@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Configuration;
@@ -30,5 +31,10 @@ public static class PbgLoggerExtensions
         LoggerProviderOptions.RegisterProviderOptions<PbgLoggerOptions, PbgLoggerProvider>(builder.Services);
 
         return builder;
+    }
+
+    public static IApplicationBuilder UsePbgLogging(this IApplicationBuilder app)
+    {
+        return app.UseMiddleware<PbgLoggingMiddleware>();
     }
 }

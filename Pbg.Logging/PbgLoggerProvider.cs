@@ -17,7 +17,7 @@ internal class PbgLoggerProvider : ILoggerProvider, ISupportExternalScope
 
     public ILogger CreateLogger(string categoryName)
     {
-        return new PbgLogger(_writer, _scopeProvider);
+        return new PbgLogger(_writer, _scopeProvider, categoryName);
     }
 
     public void SetScopeProvider(IExternalScopeProvider scopeProvider)
