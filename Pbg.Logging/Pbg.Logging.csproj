@@ -4,6 +4,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+	<PackageId>Pbg.Logging</PackageId>
+	<Company>Pbg</Company>
+	<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
 	<ItemGroup>
